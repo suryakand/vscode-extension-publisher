@@ -1,0 +1,288 @@
+name: 'VS Code Extension Publisher'
+description: 'A reusable GitHub Action to build, test, and publish VS Code extensions'
+author: 'VS Code Extension Publisher'
+
+inputs:
+  # Required inputs
+  vsce-pat:
+    description: 'Visual Studio Code Marketplace Personal Access Token'
+    required: true
+
+  # Optional inputs with defaults
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '18'
+  
+  package-manager:
+    description: 'Package manager to use (npm, yarn, pnpm)'
+    required: false
+    default: 'npm'
+  
+  pre-publish-script:
+    description: 'Script to run before publishing (e.g., "npm run vscode:prepublish")'
+    required: false
+    default: ''
+  
+  lint-script:
+    description: 'Script to run for linting'
+    required: false
+    default: 'npm run lint'
+  
+  test-script:
+    description: 'Script to run for testing'
+    required: false
+    default: 'npm run test'
+  
+  compile-script:
+    description: 'Script to run for compilation'
+    required: false
+    default: 'npm run compile'
+  
+  package-script:
+    description: 'Script to run for packaging'
+    required: false
+    default: 'npm run package'
+  
+  publish-script:
+    description: 'Script to run for publishing'
+    required: false
+    default: 'npm run publish'
+  
+  skip-tests:
+    description: 'Skip running tests'
+    required: false
+    default: 'false'
+  
+  skip-lint:
+    description: 'Skip running linting'
+    required: false
+    default: 'false'
+  
+  version-bump-type:
+    description: 'Type of version bump (major, minor, patch, auto)'
+    required: false
+    default: 'auto'
+  
+  create-github-release:
+    description: 'Create a GitHub release after publishing'
+    required: false
+    default: 'true'
+  
+  upload-vsix-artifact:
+    description: 'Upload VSIX file as GitHub artifact'
+    required: false
+    default: 'true'
+  
+  vsix-retention-days:
+    description: 'Number of days to retain VSIX artifact'
+    required: false
+    default: '30'
+
+  publish-to-marketplace:
+    description: 'Publish the extension to the Visual Studio Code Marketplace'
+    required: false
+    default: 'false'
+
+  working-directory:
+    description: 'Working directory for the extension project'
+    required: false
+    default: '.'
+
+outputs:
+  version:
+    description: 'The version that was published'
+    value: ${{ steps.get-version.outputs.version }}
+  
+  vsix-path:
+    description: 'Path to the generated VSIX file'
+    value: ${{ steps.package.outputs.vsix-path }}
+  
+  release-url:
+    description: 'URL of the created GitHub release'
+    value: ${{ steps.create-release.outputs.html_url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.package-manager }}
+        cache-dependency-path: ${{ inputs.working-directory }}/package-lock.json
+
+    - name: Install dependencies
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        case "${{ inputs.package-manager }}" in
+          npm)
+            npm ci
+            ;;
+          yarn)
+            yarn install --frozen-lockfile
+            ;;
+          pnpm)
+            pnpm install --frozen-lockfile
+            ;;
+          *)
+            echo "Unsupported package manager: ${{ inputs.package-manager }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Run pre-publish script
+      if: inputs.publish-to-marketplace == 'true' && inputs.pre-publish-script != ''
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.pre-publish-script }}
+
+    - name: Lint code
+      if: inputs.skip-lint != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.lint-script }} || echo "Linting failed or not available"
+      continue-on-error: true
+
+    - name: Compile TypeScript
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.compile-script }}
+
+    - name: Run tests
+      if: inputs.skip-tests != 'true'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.test-script }} || echo "Tests failed or not available"
+      continue-on-error: true
+
+    - name: Determine version bump type
+      id: version-type
+      if: inputs.create-github-release == 'true' && inputs.version-bump-type == 'auto'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # Get the latest commit message
+        COMMIT_MSG=$(git log -1 --pretty=%B)
+        echo "Commit message: $COMMIT_MSG"
+        
+        # Determine version bump type based on commit message
+        if [[ $COMMIT_MSG =~ \[major\]|\[breaking\]|BREAKING[[:space:]]CHANGE ]]; then
+          echo "VERSION_TYPE=major" >> $GITHUB_OUTPUT
+          echo "Detected major version bump"
+        elif [[ $COMMIT_MSG =~ \[minor\]|\[feature\]|feat: ]]; then
+          echo "VERSION_TYPE=minor" >> $GITHUB_OUTPUT
+          echo "Detected minor version bump"
+        else
+          echo "VERSION_TYPE=patch" >> $GITHUB_OUTPUT
+          echo "Detected patch version bump (default)"
+        fi
+
+    - name: Version bump
+      shell: bash
+      if: inputs.create-github-release == 'true'
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        if [ "${{ inputs.version-bump-type }}" = "auto" ]; then
+          VERSION_TYPE="${{ steps.version-type.outputs.VERSION_TYPE }}"
+        else
+          VERSION_TYPE="${{ inputs.version-bump-type }}"
+        fi
+        
+        case "${{ inputs.package-manager }}" in
+          npm)
+            npm version $VERSION_TYPE --no-git-tag-version
+            ;;
+          yarn)
+            yarn version --$VERSION_TYPE --no-git-tag-version
+            ;;
+          pnpm)
+            pnpm version $VERSION_TYPE --no-git-tag-version
+            ;;
+        esac
+
+    - name: Get new version
+      id: get-version
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+    - name: Package extension
+      id: package
+      shell: bash
+      if: inputs.upload-vsix-artifact == 'true'
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        ${{ inputs.package-script }}
+        VSIX_FILE=$(find . -name "*.vsix" -type f | head -1)
+        echo "vsix-path=$VSIX_FILE" >> $GITHUB_OUTPUT
+
+    - name: Upload VSIX artifact
+      if: inputs.upload-vsix-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: extension-vsix-${{ steps.get-version.outputs.version }}
+        path: ${{ inputs.working-directory }}/*.vsix
+        retention-days: ${{ inputs.vsix-retention-days }}
+
+    - name: Verify VSCE token
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.vsce-pat }}" ]; then
+          echo "Error: vsce-pat input is required"
+          exit 1
+        fi
+
+    - name: Publish to VS Code Marketplace
+      shell: bash
+      if: inputs.publish-to-marketplace == 'true'
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ inputs.publish-script }}
+      env:
+        VSCE_PAT: ${{ inputs.vsce-pat }}
+
+    - name: Configure Git for tagging
+      shell: bash
+      if: inputs.create-github-release == 'true'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+    - name: Commit version bump and create tag
+      shell: bash
+      if: inputs.create-github-release == 'true'
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        git add package.json
+        git commit -m "chore: bump version to ${{ steps.get-version.outputs.version }} [skip ci]" || echo "No changes to commit"
+        git tag "v${{ steps.get-version.outputs.version }}"
+        git push origin HEAD || echo "Failed to push changes"
+        git push origin "v${{ steps.get-version.outputs.version }}" || echo "Failed to push tag"
+
+    - name: Create GitHub Release
+      id: create-release
+      if: inputs.create-github-release == 'true'
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        tag_name: v${{ steps.get-version.outputs.version }}
+        release_name: Release v${{ steps.get-version.outputs.version }}
+        body: |
+          🚀 **VS Code Extension Release v${{ steps.get-version.outputs.version }}**
+          
+          **Changes in this release:**
+          - ${{ github.event.head_commit.message || 'Manual release' }}
+          
+          **Artifacts:**
+          - VSIX file: ${{ steps.package.outputs.vsix-path }}
+          
+          **Installation:**
+          You can install this extension from the VS Code Marketplace or download the VSIX file from the artifacts.
+        draft: false
+        prerelease: false
+
+branding:
+  icon: 'package'
+  color: 'blue'

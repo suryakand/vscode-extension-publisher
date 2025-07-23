@@ -1,0 +1,73 @@
+name: Example VS Code Extension Publish
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version-type:
+        description: 'Version bump type'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  # Job for building and testing (runs on all events)
+  build-and-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Build and Test Extension
+      uses: ./custom-github-action  # This would be the path to your reusable action
+      with:
+        vsce-pat: ${{ secrets.VSCE_PAT }}
+        skip-tests: 'false'
+        skip-lint: 'false'
+        create-github-release: 'false'
+        upload-vsix-artifact: 'true'
+        version-bump-type: 'patch'  # Just for building, won't actually bump
+
+  # Job for publishing (only runs on specific conditions)
+  publish:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'workflow_dispatch')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Publish Extension
+      uses: ./custom-github-action  # This would be the path to your reusable action
+      with:
+        vsce-pat: ${{ secrets.VSCE_PAT }}
+        node-version: '18'
+        package-manager: 'npm'
+        version-bump-type: ${{ github.event.inputs.version-type || 'auto' }}
+        skip-tests: 'true'  # Already tested in build-and-test job
+        skip-lint: 'true'   # Already linted in build-and-test job
+        create-github-release: 'true'
+        upload-vsix-artifact: 'true'
+        vsix-retention-days: '90'

@@ -1,0 +1,134 @@
+name: Test Reusable Action
+
+on:
+  workflow_dispatch:
+    inputs:
+      test-scenario:
+        description: 'Test scenario to run'
+        required: true
+        default: 'basic'
+        type: choice
+        options:
+          - basic
+          - skip-tests
+          - skip-lint
+          - yarn-package-manager
+          - custom-scripts
+          - no-github-release
+
+jobs:
+  test-basic:
+    if: github.event.inputs.test-scenario == 'basic'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Test Basic Scenario
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          version-bump-type: 'patch'
+
+  test-skip-tests:
+    if: github.event.inputs.test-scenario == 'skip-tests'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Skip Tests Scenario
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          skip-tests: 'true'
+          version-bump-type: 'patch'
+
+  test-skip-lint:
+    if: github.event.inputs.test-scenario == 'skip-lint'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Skip Lint Scenario
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          skip-lint: 'true'
+          version-bump-type: 'patch'
+
+  test-yarn:
+    if: github.event.inputs.test-scenario == 'yarn-package-manager'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Create yarn.lock
+        run: |
+          npm install --package-lock-only
+          npx npm-to-yarn yarn.lock
+      
+      - name: Test Yarn Package Manager
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          package-manager: 'yarn'
+          version-bump-type: 'patch'
+
+  test-custom-scripts:
+    if: github.event.inputs.test-scenario == 'custom-scripts'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Custom Scripts
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          lint-script: 'echo "Custom lint step"'
+          test-script: 'echo "Custom test step"'
+          version-bump-type: 'patch'
+
+  test-no-github-release:
+    if: github.event.inputs.test-scenario == 'no-github-release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test No GitHub Release
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          create-github-release: 'false'
+          version-bump-type: 'patch'
+
+  # Test outputs
+  test-outputs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Test Action Outputs
+        id: publish
+        uses: ./
+        with:
+          vsce-pat: ${{ secrets.VSCE_PAT }}
+          version-bump-type: 'patch'
+      
+      - name: Verify Outputs
+        run: |
+          echo "Version: ${{ steps.publish.outputs.version }}"
+          echo "VSIX Path: ${{ steps.publish.outputs.vsix-path }}"
+          echo "Release URL: ${{ steps.publish.outputs.release-url }}"
+          
+          # Verify outputs are not empty
+          if [ -z "${{ steps.publish.outputs.version }}" ]; then
+            echo "ERROR: Version output is empty"
+            exit 1
+          fi
+          
+          if [ -z "${{ steps.publish.outputs.vsix-path }}" ]; then
+            echo "ERROR: VSIX path output is empty"
+            exit 1
+          fi

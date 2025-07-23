@@ -1,0 +1,51 @@
+name: Publish VS Code Extension (Using Reusable Action)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish_type:
+        description: 'Type of release'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true) ||
+      (github.event_name == 'workflow_dispatch')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Publish Extension
+      uses: ./custom-github-action  # Use the local action
+      with:
+        vsce-pat: ${{ secrets.VSCE_PAT }}
+        node-version: '18'
+        package-manager: 'npm'
+        version-bump-type: ${{ github.event.inputs.publish_type || 'auto' }}
+        pre-publish-script: 'npm run vscode:prepublish'
+        create-github-release: 'true'
+        upload-vsix-artifact: 'true'
