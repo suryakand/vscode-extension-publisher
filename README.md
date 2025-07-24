@@ -304,4 +304,4 @@ Enable debug logging by setting the `ACTIONS_STEP_DEBUG` secret to `true` in you
 
 ## License
 Copyright (c) 2025. All rights reserved.
-This source code is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+This source code is licensed under the MIT License - see [LICENSE](LICENSE.md) for details.
