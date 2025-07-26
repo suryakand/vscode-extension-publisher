@@ -2,6 +2,8 @@
 
 A comprehensive, reusable GitHub Action for building, testing, and publishing VS Code extensions to the Visual Studio Code Marketplace.
 
+![GitHub Action](images/vscode-extension-publishe-github-action.png)
+
 ## Features
 
 - 🏗️ **Build & Test**: Automatically builds and tests your extension
@@ -305,3 +307,7 @@ Enable debug logging by setting the `ACTIONS_STEP_DEBUG` secret to `true` in you
 ## License
 Copyright (c) 2025. All rights reserved.
 This source code is licensed under the MIT License - see [LICENSE](LICENSE.md) for details.
+
+**Disclaimer:**  
+- It is user's responsibility to review and use this software own their own risk
+- Author of this software is not responsible for any loss or issue that may arise beause of this software
