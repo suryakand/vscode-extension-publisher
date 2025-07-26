@@ -1,8 +1,10 @@
-# VS Code Extension Publisher Action
+# GitHub Action to publish VS Code Extension
 
 A comprehensive, reusable GitHub Action for building, testing, and publishing VS Code extensions to the Visual Studio Code Marketplace.
 
-![GitHub Action](images/vscode-extension-publishe-github-action.png)
+![GitHub Action](https://lh3.googleusercontent.com/d/1ju2kL8W89kdv5nkpQ1zsIdsfDNClF0x1=s1024?authuser=0)
+
+[Sample VS Code Extension Project](https://github.com/suryakand/github-actions-sample) to showcase the use of this GitHub action. Follow the documentation/readme in the repo to learn more.
 
 ## Features
 
